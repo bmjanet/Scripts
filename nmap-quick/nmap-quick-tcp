@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# nmap-quick-tcp - fast, thorough TCP service scan
+#
+# Runs in two stages so it stays quick without losing accuracy:
+#   Stage 1: sweep all 65535 ports on every target, no scripts (fast)
+#   Stage 2: run -sC -sV on each host, against only its own open ports
+#
+# Run it with sudo and answer the prompts.
+
+set -u
+
+red=$'\e[0;31m'
+green=$'\e[0;32m'
+yellow=$'\e[0;33m'
+blue=$'\e[0;34m'
+bold=$'\e[1m'
+reset=$'\e[0m'
+
+info() { echo "${blue}[*]${reset} $1"; }
+ok()   { echo "${green}[+]${reset} $1"; }
+warn() { echo "${yellow}[-]${reset} $1"; }
+fail() { echo "${red}[!]${reset} $1" >&2; exit 1; }
+
+# Speed settings. Raise minrate on a fast link, lower it on a flaky one.
+# Leave maxretries at 2 - dropping it to 0 or 1 makes nmap miss open ports.
+minrate=3000
+timing=4
+maxretries=2
+hosttimeout=30m
+
+# A SYN scan needs raw sockets, so this only works as root.
+if [ "$EUID" -ne 0 ]; then
+    fail "This script must run as root. Try again with: sudo $0"
+fi
+
+# Stage 1 writes its port list here. Deleted automatically when we exit.
+portfile=$(mktemp)
+trap 'rm -f "$portfile"' EXIT
+
+
+# ---------------------------------------------------------------------------
+# Ask where the targets are coming from
+# ---------------------------------------------------------------------------
+read -rp "Are you inputting a list of IPs from a file? (y/n): " usefile
+
+if [[ "$usefile" == [Yy]* ]]; then
+    read -rep "Input file (path, or the name if in this directory): " targetfile
+    scantargets=(-iL "$targetfile")
+else
+    read -rp "Enter the IP(s) to scan: " answer
+    read -ra scantargets <<< "${answer//,/ }"
+fi
+
+
+# ---------------------------------------------------------------------------
+# Ask where the results should go
+# ---------------------------------------------------------------------------
+outfile=""
+
+read -rp "Would you like to output nmap results to a file? (y/n): " useoutput
+
+if [[ "$useoutput" == [Yy]* ]]; then
+    read -rep "Output file name: " outfile
+fi
+
+
+# ---------------------------------------------------------------------------
+# Stage 1: find which ports are open, on every target at once
+# ---------------------------------------------------------------------------
+echo
+echo "${bold}Running scan...${reset}"
+echo
+
+info "Stage 1: checking all 65535 ports..."
+nmap -sS -Pn -n -p- --open \
+     -T"$timing" --min-rate "$minrate" --max-retries "$maxretries" \
+     --host-timeout "$hosttimeout" --defeat-rst-ratelimit \
+     -oG "$portfile" "${scantargets[@]}"
+
+hostcount=$(grep -c "Ports:" "$portfile")
+
+if [ "$hostcount" -eq 0 ]; then
+    warn "No open TCP ports found."
+    exit 0
+fi
+
+echo
+ok "Found open ports on $hostcount host(s)."
+echo
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: scan each host in detail, using only that host's open ports
+# ---------------------------------------------------------------------------
+# Each stage 1 result line looks like:
+#   Host: 10.0.0.5 ()	Ports: 22/open/tcp//ssh///, 80/open/tcp//http///
+while read -r line; do
+
+    host=$(echo "$line" | cut -d' ' -f2)
+
+    # Pull this host's open port numbers out of the line and join them into
+    # the comma-separated list nmap wants, e.g. "22,80,443".
+    ports=$(echo "$line" | grep -oE '[0-9]+/open/' | cut -d/ -f1 | sort -un | paste -sd,)
+
+    echo "${bold}=== $host ($ports) ===${reset}"
+
+    # Write to a file only if one was asked for. With more than one host, add
+    # the IP to the name so the hosts do not overwrite each other.
+    outflags=()
+    if [ -n "$outfile" ]; then
+        if [ "$hostcount" -gt 1 ]; then
+            outflags=(-oA "${outfile}_${host}")
+        else
+            outflags=(-oA "$outfile")
+        fi
+    fi
+
+    nmap -sS -Pn -n -sC -sV -p "$ports" \
+         -T"$timing" --min-rate 1000 --max-retries "$maxretries" \
+         --version-intensity 7 --host-timeout "$hosttimeout" \
+         "${outflags[@]}" "$host"
+
+    echo
+
+done < <(grep "Ports:" "$portfile")
+
+# Results were written as root, so give them back to whoever ran sudo.
+if [ -n "$outfile" ] && [ -n "${SUDO_USER:-}" ]; then
+    chown "$SUDO_USER" "$outfile"*.nmap "$outfile"*.gnmap "$outfile"*.xml 2>/dev/null
+fi
+
+ok "Scan complete."
