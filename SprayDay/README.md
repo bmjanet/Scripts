@@ -1,33 +1,30 @@
 # SprayDay
 
 **SprayDay** is a multi-protocol credential sprayer for a single target. Point it at a host,
-tick the services you want to test in an interactive checklist, and it sprays either **your own
-credentials** or a set of **curated default credentials** baked in per service — using the
-tooling that already ships on Kali ([NetExec](https://www.netexec.wiki/), the `mysql` client,
-and the `psql` client).
+tick the services you want to test in an interactive checklist (thanks InquirerPy), and it sprays either your own
+credentials or a set of curated default credentials baked in per service (pgsql has different default creds than ssh).
 
-It's a database-aware companion to [NetSpray](../netspray): alongside the usual
-SMB/LDAP/WinRM/RDP/SSH protocols, it adds first-class **MSSQL, MySQL, and PostgreSQL** default
+It's a database-aware credential enumeration script inspired by NetSpray, alongside the usual
+SMB/LDAP/WinRM/RDP/SSH protocols, it adds **MSSQL, MySQL, and PostgreSQL** default
 credential checks.
 
-> ⚠️ **For authorized security testing only** — engagements you have written permission to run,
-> your own lab, CTFs, Proving Grounds, etc. You are responsible for how you use it.
+> ⚠️ **For authorized security testing only**
 
 ## Features
 
-- **Interactive service picker** — an [InquirerPy](https://github.com/kazhala/InquirerPy)
+- **Interactive service picker** - an [InquirerPy](https://github.com/kazhala/InquirerPy)
   checkbox menu for choosing which of the 8 supported services to spray.
 - **Two modes:**
-  - **Manual** — spray a username/password (each a single value *or* a file) you supply.
-  - **`--default`** — spray a curated list of well-known default credentials, tailored per
+  - **Manual** - spray a username/password (each a single value *or* a file) you supply.
+  - **`--default`** - spray a curated list of well-known default credentials, tailored per
     service (see below).
-- **Right tool per service** — NetExec for `smb, ldap, winrm, rdp, ssh, mssql`; the native
+- **Right tool per service** - NetExec for `smb, ldap, winrm, rdp, ssh, mssql`; the native
   `mysql` and `psql` clients for MySQL and PostgreSQL.
-- **Graceful skips** — if a backend tool isn't installed, that service is skipped with a warning
-  instead of aborting the run.
-- **Valid creds logged** — every hit is written to a timestamped log file (and an optional
+- **Graceful** - if a backend tool isn't installed, that service is skipped with a warning
+  instead of aborting the run. However, if you run this on a Kali box, it should come with all required services baked in.
+- **Valid creds logged** - every hit is written to a timestamped log file (and an optional
   `-o` file), with a deduped summary at the end.
-- **Scriptable** — `--services smb,mysql` skips the interactive menu for automation.
+- **Scriptable** - `--services smb,mysql` skips the interactive menu for automation.
 
 ## Supported services
 
@@ -105,10 +102,10 @@ The high-signal database and SSH lists are drawn from
 [SecLists](https://github.com/danielmiessler/SecLists) `*-betterdefaultpasslist.txt` and common
 public references. A few examples:
 
-- **mssql** — `sa:<blank>`, `sa:sa`, `sa:password`, `sa:Password123`, `admin:admin`, …
-- **mysql** — `root:<blank>`, `root:root`, `root:mysql`, `root:password`, `admin:admin`, …
-- **pgsql** — `postgres:<blank>`, `postgres:postgres`, `postgres:password`, `admin:admin`, …
-- **ssh** — `root:root`, `root:toor`, `pi:raspberry`, `admin:admin`, `kali:kali`, …
+- **mssql** - `sa:<blank>`, `sa:sa`, `sa:password`, `sa:Password123`, `admin:admin`, …
+- **mysql** - `root:<blank>`, `root:root`, `root:mysql`, `root:password`, `admin:admin`, …
+- **pgsql** - `postgres:<blank>`, `postgres:postgres`, `postgres:password`, `admin:admin`, …
+- **ssh** - `root:root`, `root:toor`, `pi:raspberry`, `admin:admin`, `kali:kali`, …
 
 > **Note on SMB/LDAP/WinRM/RDP:** these are normally domain-authenticated, so universal "default
 > credentials" barely exist. Their `--default` lists are intentionally thin, generic local-account
