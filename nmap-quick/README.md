@@ -19,8 +19,8 @@ A fast, two-stage nmap service scans. Stage 1 sweeps for open ports; stage 2 run
 Both need root (raw sockets):
 
 ```
-sudo nmap-quick-tcp [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
-sudo nmap-quick-udp [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
+sudo nmap-quick-tcp [-r] [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
+sudo nmap-quick-udp [-r] [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
 ```
 
 ## Options
@@ -30,12 +30,14 @@ sudo nmap-quick-udp [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
 | `<target>`           | One or more hosts/IPs, space-separated (like nmap)            |
 | `-iL <file>`         | Read targets from a file                                       |
 | `-oN/-oG/-oX/-oA <file>` | Save output; the flag is passed straight to nmap. With multiple hosts the IP is appended to the name |
+| `-r`, `--reliable`   | Slower, loss-tolerant settings for slow links/hosts: more retries, gentler timing, and no host-timeout so slow hosts aren't dropped. Use this if a scan misses ports or whole targets |
 
 ## Examples
 
 ```
 sudo nmap-quick-tcp 10.0.0.5
 sudo nmap-quick-tcp 10.0.0.5 10.0.0.6 -oN scan
+sudo nmap-quick-tcp -r 10.0.0.5          # reliable mode for a slow/lossy target
 sudo nmap-quick-udp -iL targets.txt -oA udp-scan
 ```
 You can also configure the source code to the flags you want. 

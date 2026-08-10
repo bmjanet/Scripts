@@ -8,7 +8,7 @@
 # UDP is slow by nature: a closed port is only proven by a rate-limited ICMP
 # reply, so scanning the top ports (not all 65535) is what keeps this practical.
 #
-# Usage: sudo nmap-quick-udp [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
+# Usage: sudo nmap-quick-udp [-r] [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]
 
 set -u
 
@@ -25,17 +25,27 @@ warn() { echo "${yellow}[-]${reset} $1"; }
 fail() { echo "${red}[!]${reset} $1" >&2; exit 1; }
 
 usage() {
-    echo "Usage: sudo $0 [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]" >&2
+    echo "Usage: sudo $0 [-r] [-iL <file>] [-oN|-oG|-oX|-oA <file>] <target> [target ...]" >&2
+    echo "  -r, --reliable  slower, loss-tolerant settings for slow links/hosts" >&2
     exit 1
 }
 
-# Speed settings. Keep min_rate near 1000 for UDP (higher just drops your own
-# packets). Raise top_ports to look wider (1000 covers almost everything).
+# Speed settings (fast defaults). Keep min_rate near 1000 for UDP (higher just
+# drops your own packets). Raise top_ports to look wider (1000 covers almost
+# everything).
 min_rate=1000
 timing=4
 max_retries=2
 host_timeout=45m
 top_ports=200
+
+# Reliable-mode settings, enabled with -r/--reliable. Fewer missed ports/targets
+# on slow or lossy paths: more retries, gentler timing, and no host-timeout (a
+# timed-out host is dropped from results entirely). min_rate stays at 1000 —
+# UDP gains nothing from a higher floor.
+reliable_timing=3
+reliable_max_retries=4
+reliable_host_timeout=0
 
 # A UDP scan needs raw sockets, so this only works as root.
 if [ "$EUID" -ne 0 ]; then
@@ -53,9 +63,12 @@ trap 'rm -f "$port_file"' EXIT
 scan_targets=()   # positional targets and any -iL <file>, in order
 output_file=""    # output base name / filespec
 output_flag=""    # the output flag chosen (-oN/-oG/-oX/-oA)
+reliable=0        # -r/--reliable: use the loss-tolerant settings
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        -r|--reliable)
+            reliable=1; shift ;;
         -iL)
             [ -n "${2:-}" ] || usage
             scan_targets+=(-iL "$2"); shift 2 ;;
@@ -70,6 +83,13 @@ done
 
 # Need at least one target: a positional host or -iL <file>.
 [ "${#scan_targets[@]}" -gt 0 ] || usage
+
+# Swap in the loss-tolerant settings when -r/--reliable was given.
+if [ "$reliable" -eq 1 ]; then
+    timing=$reliable_timing
+    max_retries=$reliable_max_retries
+    host_timeout=$reliable_host_timeout
+fi
 
 
 # ---------------------------------------------------------------------------
